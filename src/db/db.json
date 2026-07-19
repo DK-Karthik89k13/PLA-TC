@@ -1,0 +1,204 @@
+{
+  "users": [
+    {
+      "id": "admin-1",
+      "username": "admin",
+      "password": "password",
+      "role": "admin",
+      "name": "Admin",
+      "email": "admin@gceerode.ac.in"
+    },
+    {
+      "id": "student-1",
+      "username": "student",
+      "password": "password",
+      "role": "student",
+      "name": "Alex Carter",
+      "email": "alex.carter@student.edu",
+      "approved": true
+    },
+    {
+      "id": "student-1784468285117",
+      "username": "asdas",
+      "password": "123456",
+      "role": "admin",
+      "name": "dshigusds",
+      "email": "121212@gmail.com",
+      "approved": true
+    },
+    {
+      "id": "student-1784468551902",
+      "username": "aaaa",
+      "password": "123456",
+      "role": "student",
+      "name": "aaaaa",
+      "email": "aaaaa@gmail.com"
+    }
+  ],
+  "tests": [
+    {
+      "id": "test-1",
+      "title": "Quantitative Aptitude Prep",
+      "description": "Covers essential quantitative aptitude topics including Profit & Loss, Percentages, and Probability.",
+      "duration": 15,
+      "category": "Aptitude",
+      "questions": [
+        {
+          "id": "q1",
+          "question": "A shopkeeper sells an article for $180 at a gain of 20%. What was the cost price of the article?",
+          "options": [
+            "$140",
+            "$150",
+            "$160",
+            "$145"
+          ],
+          "correctAnswer": 1
+        },
+        {
+          "id": "q2",
+          "question": "If log 27 = 1.431, what is the value of log 9?",
+          "options": [
+            "0.934",
+            "0.954",
+            "0.845",
+            "1.121"
+          ],
+          "correctAnswer": 1
+        },
+        {
+          "id": "q3",
+          "question": "Three unbiased coins are tossed. What is the probability of getting at most two heads?",
+          "options": [
+            "3/4",
+            "1/4",
+            "7/8",
+            "5/8"
+          ],
+          "correctAnswer": 2
+        }
+      ],
+      "createdAt": "2026-07-19T13:36:45.703Z"
+    },
+    {
+      "id": "test-2",
+      "title": "Technical Web Core Assessment",
+      "description": "Tests fundamental concepts of modern Full-Stack web development (React, JavaScript, CSS).",
+      "duration": 10,
+      "category": "Technical",
+      "questions": [
+        {
+          "id": "q2-1",
+          "question": "Which of the following is true about React state updates?",
+          "options": [
+            "They are always synchronous",
+            "They directly modify the component state on the spot",
+            "They may be batched and are asynchronous",
+            "They force full page refreshes"
+          ],
+          "correctAnswer": 2
+        },
+        {
+          "id": "q2-2",
+          "question": "What is the purpose of the useEffect dependency array in React?",
+          "options": [
+            "To define CSS styles dynamically",
+            "To specify when the effect function should run or re-trigger",
+            "To register Event Listeners exclusively",
+            "To improve network connection speed"
+          ],
+          "correctAnswer": 1
+        }
+      ],
+      "createdAt": "2026-07-19T13:36:45.703Z"
+    }
+  ],
+  "results": [
+    {
+      "id": "res-1",
+      "userId": "student-1",
+      "username": "student",
+      "studentName": "Alex Carter",
+      "testId": "test-1",
+      "testTitle": "Quantitative Aptitude Prep",
+      "category": "Aptitude",
+      "score": 2,
+      "totalQuestions": 3,
+      "submittedAt": "2026-07-18T13:36:45.703Z",
+      "answers": {
+        "q1": 1,
+        "q2": 0,
+        "q3": 2
+      }
+    }
+  ],
+  "placementDrives": [
+    {
+      "id": "drive-1",
+      "company": "TechCorp Global",
+      "role": "Associate Software Engineer",
+      "salaryPackage": "$85,000 / Year",
+      "eligibility": "B.Tech / MCA / M.Sc with CGPA >= 7.5. No standing backlogs.",
+      "date": "July 25, 2026",
+      "status": "Open"
+    },
+    {
+      "id": "drive-2",
+      "company": "InnoSystems",
+      "role": "Cloud Architect & DevOps Intern",
+      "salaryPackage": "$45 / Hour (Internship)",
+      "eligibility": "Computer Science, Information Technology, or related streams.",
+      "date": "August 03, 2026",
+      "status": "Open"
+    },
+    {
+      "id": "drive-3",
+      "company": "Apex Financial Tech",
+      "role": "Quantitative Analyst",
+      "salaryPackage": "$120,000 / Year",
+      "eligibility": "Highly proficient in Mathematics / Stats. CGPA >= 8.5.",
+      "date": "August 18, 2026",
+      "status": "Upcoming"
+    }
+  ],
+  "trainingResources": [
+    {
+      "id": "tr-1",
+      "title": "Acing the Coding Technical Interview",
+      "category": "Technical",
+      "type": "Guide",
+      "content": "Understand Big O notation, practice Arrays, Hashing, Linked Lists, Trees, and DP. Always communicate your thoughts out loud during tech interviews.",
+      "readTime": "6 mins",
+      "tags": [
+        "Interview Tips",
+        "Algorithms",
+        "DS"
+      ]
+    },
+    {
+      "id": "tr-2",
+      "title": "Formulas and Tricks for Quantitative Aptitude",
+      "category": "Aptitude",
+      "type": "Cheatsheet",
+      "content": "Percentages: % change = (diff / original) * 100. Profit & Loss: Profit = SP - CP. Speed & Distance: Relative speed = Sum of speeds (moving in opposite directions).",
+      "readTime": "4 mins",
+      "tags": [
+        "Aptitude",
+        "Math Tricks",
+        "Formulas"
+      ]
+    },
+    {
+      "id": "tr-3",
+      "title": "Behavioral Questions Guide (STAR Method)",
+      "category": "Verbal",
+      "type": "Guide",
+      "content": "STAR stands for Situation, Task, Action, Result. Frame all response stories around how you resolved conflicts, solved tech bugs, or managed tight schedules.",
+      "readTime": "8 mins",
+      "tags": [
+        "Behavioral",
+        "STAR Method",
+        "Soft Skills"
+      ]
+    }
+  ]
+}
