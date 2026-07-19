@@ -12,11 +12,21 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
-// Safe require for CommonJS modules in ES Modules
-const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
-const mammoth = require('mammoth');
-const XLSX = require('xlsx');
+// Safe require for CommonJS modules in ES Modules (dev, via tsx) or bundled
+// CJS (production, via esbuild). In dev, import.meta.url is a real string and
+// createRequire succeeds. In the bundled CJS build, esbuild strips
+// import.meta down to an empty object, so import.meta.url is undefined and
+// createRequire throws — we catch that and fall back to the native `require`
+// that Node's CJS module wrapper always provides in a real .cjs file.
+let requireFn: NodeRequire;
+try {
+  requireFn = createRequire(import.meta.url);
+} catch {
+  requireFn = require;
+}
+const pdf = requireFn('pdf-parse');
+const mammoth = requireFn('mammoth');
+const XLSX = requireFn('xlsx');
 
 // Load environment variables
 dotenv.config();
