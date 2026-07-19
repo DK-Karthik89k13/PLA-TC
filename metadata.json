@@ -1,0 +1,6 @@
+{
+  "name": "PLA & T",
+  "description": "A comprehensive portal for student placement preparation, training modules, and mock exams with an administrator dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
