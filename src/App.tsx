@@ -381,6 +381,22 @@ export default function App() {
     setNewDeadline('');
   };
 
+  // Admin: Delete a single result from the Student Gradebook
+  const handleDeleteResult = async (resultId: string) => {
+    if (!window.confirm('Delete this result? This cannot be undone.')) return;
+    try {
+      const res = await fetch(`/api/results/${resultId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setResults((prev) => prev.filter((r) => r.id !== resultId));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to delete result.');
+      }
+    } catch (err) {
+      alert('Network error while deleting result.');
+    }
+  };
+
   // Admin: Approve user account
   const handleApproveUser = async (userId: string) => {
     try {
@@ -1055,6 +1071,7 @@ export default function App() {
                         <div className="flex items-center gap-4 text-[11px]">
                           <span className="flex items-center gap-1"><ListOrdered className="h-3.5 w-3.5" /> {test.questions.length} Questions</span>
                           <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {test.duration} mins</span>
+                          <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {new Date(test.createdAt).toLocaleDateString()}</span>
                         </div>
                         <button
                           onClick={() => setActiveTest(test)}
@@ -1328,6 +1345,21 @@ export default function App() {
                 <Plus className="h-4 w-4" /> Create Test Manually
               </button>
               <button
+                onClick={() => setActiveTab('active-tests')}
+                className={`pb-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
+                  activeTab === 'active-tests'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                <ListOrdered className="h-4 w-4" /> Active Tests
+                {tests.length > 0 && (
+                  <span className="bg-indigo-100 text-indigo-700 text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0">
+                    {tests.length}
+                  </span>
+                )}
+              </button>
+              <button
                 onClick={() => setActiveTab('gradebook')}
                 className={`pb-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-1.5 ${
                   activeTab === 'gradebook'
@@ -1531,6 +1563,59 @@ export default function App() {
               </div>
             )}
 
+            {/* TAB CONTENT: Active / Currently Conducted Tests */}
+            {activeTab === 'active-tests' && (
+              <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+                {tests.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 space-y-2">
+                    <ListOrdered className="h-10 w-10 text-slate-300 mx-auto" />
+                    <p className="font-semibold text-sm">No tests are currently published.</p>
+                    <p className="text-xs">Create one via AI Test Generator or Manual Test Creator.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold">
+                          <th className="p-4">Test Title</th>
+                          <th className="p-4">Category</th>
+                          <th className="p-4">Duration</th>
+                          <th className="p-4">Questions</th>
+                          <th className="p-4">Submissions</th>
+                          <th className="p-4">Published On</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {tests.map((test) => {
+                          const submissionCount = results.filter((r) => r.testId === test.id).length;
+                          return (
+                            <tr key={test.id} className="hover:bg-slate-50/50 transition-all">
+                              <td className="p-4 font-bold text-slate-900">{test.title}</td>
+                              <td className="p-4">
+                                <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase">
+                                  {test.category}
+                                </span>
+                              </td>
+                              <td className="p-4 flex items-center gap-1 text-slate-600">
+                                <Clock className="h-3.5 w-3.5" /> {test.duration} min
+                              </td>
+                              <td className="p-4 text-slate-600">{test.questions.length}</td>
+                              <td className="p-4">
+                                <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border border-indigo-100">
+                                  {submissionCount} submitted
+                                </span>
+                              </td>
+                              <td className="p-4 text-slate-400">{new Date(test.createdAt).toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* TAB CONTENT: Admin Gradebook Reports */}
             {activeTab === 'gradebook' && (() => {
               const filteredResults = results.filter((res) => {
@@ -1623,6 +1708,7 @@ export default function App() {
                               <th className="p-4">Score</th>
                               <th className="p-4">Accuracy</th>
                               <th className="p-4">Submission Timestamp</th>
+                              <th className="p-4 text-right">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
@@ -1652,6 +1738,15 @@ export default function App() {
                                     </span>
                                   </td>
                                   <td className="p-4 text-slate-400">{new Date(res.submittedAt).toLocaleString()}</td>
+                                  <td className="p-4 text-right">
+                                    <button
+                                      onClick={() => handleDeleteResult(res.id)}
+                                      className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-lg border border-red-100 transition-all inline-flex items-center gap-1 cursor-pointer"
+                                      title="Delete this result"
+                                    >
+                                      <X className="h-3.5 w-3.5" /> Delete
+                                    </button>
+                                  </td>
                                 </tr>
                               );
                             })}

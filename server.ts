@@ -12,8 +12,18 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
-// Safe require for CommonJS modules in ES Modules or native CJS
-const requireFn = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+// Safe require for CommonJS modules in ES Modules (dev, via tsx) or bundled
+// CJS (production, via esbuild). In dev, import.meta.url is a real string and
+// createRequire succeeds. In the bundled CJS build, esbuild strips
+// import.meta down to an empty object, so import.meta.url is undefined and
+// createRequire throws — we catch that and fall back to the native `require`
+// that Node's CJS module wrapper always provides in a real .cjs file.
+let requireFn: NodeRequire;
+try {
+  requireFn = createRequire(import.meta.url);
+} catch {
+  requireFn = require;
+}
 const pdf = requireFn('pdf-parse');
 const mammoth = requireFn('mammoth');
 const XLSX = requireFn('xlsx');
@@ -857,6 +867,21 @@ app.get('/api/results/student/:userId', (req, res) => {
 app.get('/api/results/all', (req, res) => {
   const db = readDb();
   res.json({ results: db.results });
+});
+
+// 8b. Results API: Delete a single result (Admin/Faculty gradebook cleanup)
+app.delete('/api/results/:id', (req, res) => {
+  const { id } = req.params;
+  const db = readDb();
+  const initialLength = db.results.length;
+  db.results = db.results.filter((r: any) => r.id !== id);
+
+  if (db.results.length === initialLength) {
+    return res.status(404).json({ error: 'Result not found' });
+  }
+
+  writeDb(db);
+  res.json({ success: true, message: 'Result deleted successfully' });
 });
 
 // 9. Placement Drives API: Get List
