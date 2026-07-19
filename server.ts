@@ -12,11 +12,11 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
-// Safe require for CommonJS modules in ES Modules
-const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
-const mammoth = require('mammoth');
-const XLSX = require('xlsx');
+// Safe require for CommonJS modules in ES Modules or native CJS
+const requireFn = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+const pdf = requireFn('pdf-parse');
+const mammoth = requireFn('mammoth');
+const XLSX = requireFn('xlsx');
 
 // Load environment variables
 dotenv.config();
