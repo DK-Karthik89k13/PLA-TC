@@ -631,6 +631,7 @@ Return the result STRICTLY as a JSON array matching this schema:
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
+        maxOutputTokens: 65536,
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -864,6 +865,7 @@ Requirements:
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
+        maxOutputTokens: 65536,
         responseSchema: {
           type: Type.ARRAY,
           items: {
