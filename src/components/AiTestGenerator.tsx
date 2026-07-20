@@ -312,7 +312,7 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                     <input
                       type="range"
                       min="3"
-                      max="10"
+                      max="100"
                       step="1"
                       value={numQuestions}
                       onChange={(e) => setNumQuestions(parseInt(e.target.value))}
@@ -430,7 +430,7 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                   <input
                     type="range"
                     min="3"
-                    max="10"
+                    max="100"
                     step="1"
                     value={numQuestions}
                     onChange={(e) => setNumQuestions(parseInt(e.target.value))}
