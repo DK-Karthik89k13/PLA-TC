@@ -11,6 +11,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { getPool, initUsersTable, seedUsersIfEmpty, rowToUser } from './src/db/postgres';
 
 // Safe require for CommonJS modules in ES Modules (dev, via tsx) or bundled
 // CJS (production, via esbuild). In dev, import.meta.url is a real string and
@@ -243,106 +244,143 @@ function getGenAI() {
 // REST API Endpoints
 
 // 1. Auth Endpoint: Login
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
-  const db = readDb();
-  const user = db.users.find(
-    (u: any) => u.username.toLowerCase() === username.toLowerCase() && u.password === password
-  );
+  try {
+    const db = getPool();
+    const { rows } = await db.query(
+      'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND password = $2',
+      [username, password]
+    );
 
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid username or password' });
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    const { password: _, ...safeUser } = rowToUser(rows[0])!;
+    res.json({ user: safeUser });
+  } catch (error: any) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Database error during login. Check DATABASE_URL.' });
   }
-
-  // Generate safe user profile for client
-  const { password: _, ...safeUser } = user;
-  res.json({ user: safeUser });
 });
 
 // 2. Auth Endpoint: Register (For Students)
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { username, password, name, email, branchType, department } = req.body;
   if (!username || !password || !name || !email) {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  const db = readDb();
-  const exists = db.users.some((u: any) => u.username.toLowerCase() === username.toLowerCase());
-  if (exists) {
-    return res.status(400).json({ error: 'Username already taken' });
+  try {
+    const db = getPool();
+    const exists = await db.query('SELECT 1 FROM users WHERE LOWER(username) = LOWER($1)', [username]);
+    if (exists.rows.length > 0) {
+      return res.status(400).json({ error: 'Username already taken' });
+    }
+
+    const newUser = {
+      id: `student-${Date.now()}`,
+      username,
+      password,
+      role: 'student' as const,
+      name,
+      email,
+      branchType: branchType || '',
+      department: department || '',
+      approved: false
+    };
+
+    await db.query(
+      `INSERT INTO users (id, username, password, role, name, email, approved, branch_type, department)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [newUser.id, newUser.username, newUser.password, newUser.role, newUser.name,
+       newUser.email, newUser.approved, newUser.branchType, newUser.department]
+    );
+
+    const { password: _, ...safeUser } = newUser;
+    res.json({ user: safeUser });
+  } catch (error: any) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Database error during registration. Check DATABASE_URL.' });
   }
-
-  const newUser = {
-    id: `student-${Date.now()}`,
-    username,
-    password,
-    role: 'student' as const,
-    name,
-    email,
-    branchType: branchType || '',
-    department: department || '',
-    approved: false
-  };
-
-  db.users.push(newUser);
-  writeDb(db);
-
-  const { password: _, ...safeUser } = newUser;
-  res.json({ user: safeUser });
 });
 
 // 2b. Auth Endpoint: Check user approval status
-app.get('/api/auth/status/:id', (req, res) => {
+app.get('/api/auth/status/:id', async (req, res) => {
   const { id } = req.params;
-  const db = readDb();
-  const user = db.users.find((u: any) => u.id === id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+  try {
+    const db = getPool();
+    const { rows } = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const { password, ...safeUser } = rowToUser(rows[0])!;
+    res.json({ user: safeUser });
+  } catch (error: any) {
+    console.error('Auth status error:', error);
+    res.status(500).json({ error: 'Database error. Check DATABASE_URL.' });
   }
-  const { password, ...safeUser } = user;
-  res.json({ user: safeUser });
 });
 
 // 2c. Users API: Get list of all users (Admin view)
-app.get('/api/users', (req, res) => {
-  const db = readDb();
-  const allUsers = db.users.map(({ password, ...safeUser }: any) => safeUser);
-  res.json({ users: allUsers });
+app.get('/api/users', async (req, res) => {
+  try {
+    const db = getPool();
+    const { rows } = await db.query('SELECT * FROM users ORDER BY id');
+    const allUsers = rows.map((r) => {
+      const { password, ...safeUser } = rowToUser(r)!;
+      return safeUser;
+    });
+    res.json({ users: allUsers });
+  } catch (error: any) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Database error. Check DATABASE_URL.' });
+  }
 });
 
 // 2d. Users API: Approve user
-app.put('/api/users/:id/approve', (req, res) => {
+app.put('/api/users/:id/approve', async (req, res) => {
   const { id } = req.params;
-  const db = readDb();
-  const user = db.users.find((u: any) => u.id === id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+  try {
+    const db = getPool();
+    const { rows } = await db.query(
+      'UPDATE users SET approved = true WHERE id = $1 RETURNING *',
+      [id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const { password, ...safeUser } = rowToUser(rows[0])!;
+    res.json({ user: safeUser, message: 'User approved successfully' });
+  } catch (error: any) {
+    console.error('Approve user error:', error);
+    res.status(500).json({ error: 'Database error. Check DATABASE_URL.' });
   }
-  user.approved = true;
-  writeDb(db);
-  const { password, ...safeUser } = user;
-  res.json({ user: safeUser, message: 'User approved successfully' });
 });
 
 // 2e. Users API: Delete/Reject user
-app.delete('/api/users/:id', (req, res) => {
+app.delete('/api/users/:id', async (req, res) => {
   const { id } = req.params;
-  const db = readDb();
-  const initialLength = db.users.length;
-  db.users = db.users.filter((u: any) => u.id !== id);
-  if (db.users.length === initialLength) {
-    return res.status(404).json({ error: 'User not found' });
+  try {
+    const db = getPool();
+    const { rowCount } = await db.query('DELETE FROM users WHERE id = $1', [id]);
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ success: true, message: 'User deleted/rejected successfully' });
+  } catch (error: any) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Database error. Check DATABASE_URL.' });
   }
-  writeDb(db);
-  res.json({ success: true, message: 'User deleted/rejected successfully' });
 });
 
 // 2h. Users API: Create a new user (Admin/Faculty privilege)
-app.post('/api/users', (req, res) => {
+app.post('/api/users', async (req, res) => {
   const { name, username, password, email, role, approved, branchType, department } = req.body;
   if (!name || !username || !password || !email || !role) {
     return res.status(400).json({ error: 'All fields (name, username, password, email, role) are required' });
@@ -352,96 +390,115 @@ app.post('/api/users', (req, res) => {
     return res.status(400).json({ error: 'Invalid role' });
   }
 
-  const db = readDb();
-  const exists = db.users.some((u: any) => u.username.toLowerCase() === username.toLowerCase());
-  if (exists) {
-    return res.status(400).json({ error: 'Username already taken' });
+  try {
+    const db = getPool();
+    const exists = await db.query('SELECT 1 FROM users WHERE LOWER(username) = LOWER($1)', [username]);
+    if (exists.rows.length > 0) {
+      return res.status(400).json({ error: 'Username already taken' });
+    }
+
+    const newUser = {
+      id: `${role}-${Date.now()}`,
+      username,
+      password,
+      role,
+      name,
+      email,
+      branchType: branchType || '',
+      department: department || '',
+      approved: approved !== undefined ? approved : true
+    };
+
+    await db.query(
+      `INSERT INTO users (id, username, password, role, name, email, approved, branch_type, department)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [newUser.id, newUser.username, newUser.password, newUser.role, newUser.name,
+       newUser.email, newUser.approved, newUser.branchType, newUser.department]
+    );
+
+    const { password: _, ...safeUser } = newUser;
+    res.json({ user: safeUser, message: 'User created successfully' });
+  } catch (error: any) {
+    console.error('Create user error:', error);
+    res.status(500).json({ error: 'Database error. Check DATABASE_URL.' });
   }
-
-  const newUser = {
-    id: `${role}-${Date.now()}`,
-    username,
-    password,
-    role,
-    name,
-    email,
-    branchType: branchType || '',
-    department: department || '',
-    approved: approved !== undefined ? approved : true
-  };
-
-  db.users.push(newUser);
-  writeDb(db);
-
-  const { password: _, ...safeUser } = newUser;
-  res.json({ user: safeUser, message: 'User created successfully' });
 });
 
 // 2f. Users API: Update user role
-app.put('/api/users/:id/role', (req, res) => {
+app.put('/api/users/:id/role', async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
   if (role !== 'student' && role !== 'admin' && role !== 'faculty') {
     return res.status(400).json({ error: 'Invalid role' });
   }
-  const db = readDb();
-  const user = db.users.find((u: any) => u.id === id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+  try {
+    const db = getPool();
+    const approved = (role === 'admin' || role === 'faculty') ? true : undefined;
+    const { rows } = approved !== undefined
+      ? await db.query('UPDATE users SET role = $1, approved = $2 WHERE id = $3 RETURNING *', [role, approved, id])
+      : await db.query('UPDATE users SET role = $1 WHERE id = $2 RETURNING *', [role, id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const { password, ...safeUser } = rowToUser(rows[0])!;
+    res.json({ user: safeUser, message: 'User role updated successfully' });
+  } catch (error: any) {
+    console.error('Update role error:', error);
+    res.status(500).json({ error: 'Database error. Check DATABASE_URL.' });
   }
-  user.role = role;
-  if (role === 'admin' || role === 'faculty') {
-    user.approved = true;
-  }
-  writeDb(db);
-  const { password, ...safeUser } = user;
-  res.json({ user: safeUser, message: 'User role updated successfully' });
 });
 
 // 2g. Users API: Update user details (Admin privilege)
-app.put('/api/users/:id', (req, res) => {
+app.put('/api/users/:id', async (req, res) => {
   const { id } = req.params;
   const { name, username, email, role, approved, branchType, department } = req.body;
-  
+
   if (role && role !== 'student' && role !== 'admin' && role !== 'faculty') {
     return res.status(400).json({ error: 'Invalid role' });
   }
 
-  const db = readDb();
-  const user = db.users.find((u: any) => u.id === id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
-  if (name !== undefined) user.name = name;
-  if (username !== undefined) {
-    // Check if other user already has this username
-    const exists = db.users.some((u: any) => u.username.toLowerCase() === username.toLowerCase() && u.id !== id);
-    if (exists) {
-      return res.status(400).json({ error: 'Username already taken' });
+  try {
+    const db = getPool();
+    const existing = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
     }
-    user.username = username;
-  }
-  if (email !== undefined) user.email = email;
-  if (role !== undefined) {
-    user.role = role;
-    if (role === 'admin' || role === 'faculty') {
-      user.approved = true;
-    }
-  }
-  if (approved !== undefined) {
-    user.approved = approved;
-  }
-  if (branchType !== undefined) {
-    user.branchType = branchType;
-  }
-  if (department !== undefined) {
-    user.department = department;
-  }
+    const current = rowToUser(existing.rows[0])!;
 
-  writeDb(db);
-  const { password, ...safeUser } = user;
-  res.json({ user: safeUser, message: 'User updated successfully' });
+    if (username !== undefined) {
+      const usernameTaken = await db.query(
+        'SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) AND id != $2',
+        [username, id]
+      );
+      if (usernameTaken.rows.length > 0) {
+        return res.status(400).json({ error: 'Username already taken' });
+      }
+    }
+
+    const merged = {
+      name: name !== undefined ? name : current.name,
+      username: username !== undefined ? username : current.username,
+      email: email !== undefined ? email : current.email,
+      role: role !== undefined ? role : current.role,
+      approved: approved !== undefined ? approved : ((role === 'admin' || role === 'faculty') ? true : current.approved),
+      branchType: branchType !== undefined ? branchType : current.branchType,
+      department: department !== undefined ? department : current.department,
+    };
+
+    const { rows } = await db.query(
+      `UPDATE users SET name = $1, username = $2, email = $3, role = $4,
+       approved = $5, branch_type = $6, department = $7 WHERE id = $8 RETURNING *`,
+      [merged.name, merged.username, merged.email, merged.role,
+       merged.approved, merged.branchType, merged.department, id]
+    );
+
+    const { password, ...safeUser } = rowToUser(rows[0])!;
+    res.json({ user: safeUser, message: 'User updated successfully' });
+  } catch (error: any) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Database error. Check DATABASE_URL.' });
+  }
 });
 
 // 3. Tests API: List
@@ -1027,6 +1084,15 @@ Keep your tone inspiring, highly professional, encouraging, and clear.`;
 // Serve static Vite assets in production, otherwise hook up Vite middleware
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
+
+  // Create the users table (if needed) and seed default accounts on first run
+  try {
+    await initUsersTable();
+    await seedUsersIfEmpty(SEED_DATA.users);
+  } catch (error: any) {
+    console.error('PostgreSQL connection failed on startup:', error.message);
+    console.error('Set DATABASE_URL in your .env file. User login/register will not work until this is fixed.');
+  }
 
   if (!isProduction) {
     const vite = await createViteServer({
