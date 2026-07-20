@@ -319,9 +319,9 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                       className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-400 mt-3"
                     />
                     <div className="flex justify-between text-[10px] text-indigo-300 px-1">
-                      <span>3 MCQs</span>
-                      <span>5 MCQs</span>
-                      <span>10 MCQs</span>
+                      <span>30 MCQs</span>
+                      <span>50 MCQs</span>
+                      <span>100 MCQs</span>
                     </div>
                   </div>
                 </div>
@@ -437,9 +437,9 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                     className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-400 mt-3"
                   />
                   <div className="flex justify-between text-[10px] text-indigo-300 px-1">
-                    <span>3 MCQs</span>
-                    <span>5 MCQs</span>
-                    <span>10 MCQs</span>
+                    <span>30 MCQs</span>
+                    <span>50 MCQs</span>
+                    <span>100 MCQs</span>
                   </div>
                 </div>
 
