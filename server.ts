@@ -700,9 +700,37 @@ app.post('/api/tests/generate-from-file', async (req, res) => {
       const jsonStr = buffer.toString('utf-8');
       try {
         const parsed = JSON.parse(jsonStr);
-        // If it's already a valid MCQ list, we can load it directly
+
+        // Format A: bare top-level array of MCQs, e.g. [{question, options, correctAnswer}]
         if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].question && Array.isArray(parsed[0].options)) {
           directMcqs = parsed;
+        }
+        // Format B: wrapped object with a nested "questions" array, e.g.
+        // { title, questions: [{ question, options, correct_answer: "text of the right option" }] }
+        else if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0 &&
+                 parsed.questions[0].question && Array.isArray(parsed.questions[0].options)) {
+          directMcqs = parsed.questions.map((q: any) => {
+            let correctIndex = 0;
+
+            // correctAnswer might already be a numeric index
+            if (typeof q.correctAnswer === 'number') {
+              correctIndex = q.correctAnswer;
+            } else if (typeof q.correct_answer === 'number') {
+              correctIndex = q.correct_answer;
+            } else {
+              // Otherwise it's given as answer text (e.g. "10", "₹100") -
+              // find which option it matches (trimmed, case-insensitive)
+              const answerText = String(q.correctAnswer ?? q.correct_answer ?? '').trim().toLowerCase();
+              const matchIndex = q.options.findIndex((opt: string) => String(opt).trim().toLowerCase() === answerText);
+              correctIndex = matchIndex !== -1 ? matchIndex : 0;
+            }
+
+            return {
+              question: q.question,
+              options: q.options,
+              correctAnswer: correctIndex
+            };
+          });
         } else {
           extractedText = jsonStr;
         }
@@ -776,14 +804,19 @@ app.post('/api/tests/generate-from-file', async (req, res) => {
 
   // If we have direct MCQs, we don't even need Gemini
   if (directMcqs) {
+    // Respect the user's selected question count here too, same as the AI path
+    const trimmedMcqs = directMcqs.length > targetQuestionCount
+      ? directMcqs.slice(0, targetQuestionCount)
+      : directMcqs;
+
     const db = readDb();
     const newTest = {
       id: `test-ai-${Date.now()}`,
       title: `Imported: ${fileName.substring(0, 20)}`,
       description: `Imported directly from JSON file "${fileName}".`,
-      duration: directMcqs.length * 3,
+      duration: trimmedMcqs.length * 3,
       category,
-      questions: directMcqs.map((q: any, idx: number) => ({
+      questions: trimmedMcqs.map((q: any, idx: number) => ({
         id: `q-ai-${idx}-${Date.now()}`,
         question: q.question,
         options: q.options,
