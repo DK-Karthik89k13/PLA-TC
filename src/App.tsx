@@ -17,7 +17,14 @@ import { TakeTest } from './components/TakeTest';
 
 export default function App() {
   // Authentication state
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('pla_tc_current_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authRole, setAuthRole] = useState<'student' | 'admin'>('student');
   const [username, setUsername] = useState('');
@@ -149,6 +156,20 @@ export default function App() {
     loadPortalData();
   }, [currentUser]);
 
+  // Keep the session in sync with localStorage so a page reload
+  // doesn't kick the user back to the login screen
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem('pla_tc_current_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('pla_tc_current_user');
+      }
+    } catch {
+      // localStorage unavailable (e.g. private browsing) — ignore
+    }
+  }, [currentUser]);
+
   // Auth: Handle Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,6 +248,11 @@ export default function App() {
     setResults([]);
     setActiveTab('tests');
     setActiveTest(null);
+    try {
+      localStorage.removeItem('pla_tc_current_user');
+    } catch {
+      // ignore
+    }
   };
 
   // Admin: Add dynamic question block
