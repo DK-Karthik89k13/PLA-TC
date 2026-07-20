@@ -47,9 +47,9 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
 
   const handleFileChange = (file: File) => {
     const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    const allowed = ['.docx', '.pdf', '.xls', '.xlsx', '.json'];
+    const allowed = ['.docx', '.pdf', '.xls', '.xlsx', '.json', '.txt', '.csv'];
     if (!allowed.includes(ext)) {
-      setError('Invalid file format. Please upload .docx, .pdf, .xls, .xlsx, or .json.');
+      setError('Invalid file format. Please upload .docx, .pdf, .xls, .xlsx, .json, .txt, or .csv.');
       setUploadedFile(null);
       setBase64Data('');
       return;
@@ -141,7 +141,8 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
           fileName: uploadedFile.name,
           fileData: base64Data,
           category,
-          difficulty
+          difficulty,
+          numQuestions
         })
       });
 
@@ -352,7 +353,7 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                     type="file"
                     id="file-upload-input"
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    accept=".docx,.pdf,.xls,.xlsx,.json"
+                    accept=".docx,.pdf,.xls,.xlsx,.json,.txt,.csv"
                     onChange={(e) => {
                       if (e.target.files && e.target.files.length > 0) {
                         handleFileChange(e.target.files[0]);
@@ -389,7 +390,7 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-200">Drag & drop or <span className="text-indigo-400 hover:underline">browse</span></p>
-                        <p className="text-[10px] text-indigo-300 mt-1">Accepts PDF, DOCX, XLS/XLSX, and JSON files</p>
+                        <p className="text-[10px] text-indigo-300 mt-1">Accepts PDF, DOCX, XLS/XLSX, JSON, TXT, and CSV files</p>
                       </div>
                     </div>
                   )}
@@ -421,6 +422,24 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                       <option value="Medium">Standard Assessment (Medium)</option>
                       <option value="Hard">Advanced / FAANG Drill (Hard)</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-indigo-200">Number of Questions ({numQuestions})</label>
+                  <input
+                    type="range"
+                    min="3"
+                    max="10"
+                    step="1"
+                    value={numQuestions}
+                    onChange={(e) => setNumQuestions(parseInt(e.target.value))}
+                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-400 mt-3"
+                  />
+                  <div className="flex justify-between text-[10px] text-indigo-300 px-1">
+                    <span>3 MCQs</span>
+                    <span>5 MCQs</span>
+                    <span>10 MCQs</span>
                   </div>
                 </div>
 
