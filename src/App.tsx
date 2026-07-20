@@ -156,6 +156,16 @@ export default function App() {
     loadPortalData();
   }, [currentUser]);
 
+  // Keep admin/faculty user & test data fresh in case another admin/faculty
+  // adds or changes something in a separate session
+  useEffect(() => {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'faculty')) return;
+    const interval = setInterval(() => {
+      loadPortalData();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
   // Keep the session in sync with localStorage so a page reload
   // doesn't kick the user back to the login screen
   useEffect(() => {
@@ -2228,6 +2238,14 @@ export default function App() {
                         </h5>
                         
                         <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <button
+                            onClick={() => loadPortalData()}
+                            className="p-1 px-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200 transition-all text-[10px] flex items-center gap-1 cursor-pointer"
+                            title="Refresh user list"
+                          >
+                            <RefreshCw className="h-3 w-3" /> Refresh
+                          </button>
+
                           <select
                             value={filterSectionDept}
                             onChange={(e) => setFilterSectionDept(e.target.value)}
