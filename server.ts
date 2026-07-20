@@ -549,6 +549,25 @@ app.post('/api/tests', (req, res) => {
   res.status(201).json({ test: newTest });
 });
 
+// 4b. Tests API: Delete a test (Admin/Faculty)
+app.delete('/api/tests/:id', (req, res) => {
+  const { id } = req.params;
+  const db = readDb();
+  const initialLength = db.tests.length;
+  db.tests = db.tests.filter((t: any) => t.id !== id);
+
+  if (db.tests.length === initialLength) {
+    return res.status(404).json({ error: 'Test not found' });
+  }
+
+  // Also remove any student results tied to this test, so the gradebook
+  // doesn't reference a test that no longer exists
+  db.results = db.results.filter((r: any) => r.testId !== id);
+
+  writeDb(db);
+  res.json({ success: true, message: 'Test and its associated results deleted successfully' });
+});
+
 // 5. Tests API: Generate Test with Gemini AI!
 app.post('/api/tests/generate-ai', async (req, res) => {
   const { topic, numQuestions, category, difficulty } = req.body;
