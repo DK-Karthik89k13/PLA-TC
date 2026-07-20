@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Award, BookOpen, Calendar, ChevronRight, Contact, Cpu, FileText, 
   GraduationCap, LogIn, LogOut, Mail, Plus, Shield, Sparkles, Trophy, 
-  Users, Eye, Building, ListOrdered, Clock, UserPlus, FileCheck2, ShieldAlert, RefreshCw, X
+  Users, Eye, Building, ListOrdered, Clock, UserPlus, FileCheck2, ShieldAlert, RefreshCw, X, Trash2, CheckCircle2
 } from 'lucide-react';
 import { User, Test, TestResult, PlacementDrive, TrainingResource } from './types';
 import { ContactModal } from './components/InfoModals';
@@ -88,6 +88,9 @@ export default function App() {
   const [filterSectionDept, setFilterSectionDept] = useState<string>('All');
   const [printPreviewType, setPrintPreviewType] = useState<'gradebook' | 'section-list' | null>(null);
   const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('landscape');
+
+  // Active Tests admin panel: view test details (with correct answers) and delete
+  const [viewingTest, setViewingTest] = useState<Test | null>(null);
 
   // Fetch initial portal data
   const loadPortalData = async () => {
@@ -379,6 +382,24 @@ export default function App() {
     setNewSalary('');
     setNewEligibility('');
     setNewDeadline('');
+  };
+
+  // Admin: Delete a test from the Active Tests panel
+  const handleDeleteTest = async (testId: string, testTitle: string) => {
+    if (!window.confirm(`Delete "${testTitle}"? This also removes any student results tied to it. This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/tests/${testId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setTests((prev) => prev.filter((t) => t.id !== testId));
+        setResults((prev) => prev.filter((r) => r.testId !== testId));
+        if (viewingTest?.id === testId) setViewingTest(null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to delete test.');
+      }
+    } catch (err) {
+      alert('Network error while deleting test.');
+    }
   };
 
   // Admin: Delete a single result from the Student Gradebook
@@ -1583,6 +1604,7 @@ export default function App() {
                           <th className="p-4">Questions</th>
                           <th className="p-4">Submissions</th>
                           <th className="p-4">Published On</th>
+                          <th className="p-4 text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -1606,6 +1628,24 @@ export default function App() {
                                 </span>
                               </td>
                               <td className="p-4 text-slate-400">{new Date(test.createdAt).toLocaleString()}</td>
+                              <td className="p-4">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => setViewingTest(test)}
+                                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold rounded-lg border border-indigo-100 transition-all inline-flex items-center gap-1 cursor-pointer"
+                                    title="View test with correct answers"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" /> View
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTest(test.id, test.title)}
+                                    className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-lg border border-red-100 transition-all inline-flex items-center gap-1 cursor-pointer"
+                                    title="Delete this test"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -2323,6 +2363,72 @@ export default function App() {
         isOpen={isContactOpen} 
         onClose={() => setIsContactOpen(false)} 
       />
+
+      {/* View Test Modal (Admin/Faculty) - shows correct answers */}
+      {viewingTest && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 max-w-2xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-900">{viewingTest.title}</h3>
+                <p className="text-xs text-slate-400 mt-1">{viewingTest.description}</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 pt-2">
+                  <span className="flex items-center gap-1"><ListOrdered className="h-3.5 w-3.5" /> {viewingTest.questions.length} Questions</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {viewingTest.duration} mins</span>
+                  <span className="bg-slate-100 px-2 py-0.5 rounded-full font-semibold uppercase">{viewingTest.category}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingTest(null)}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0"
+              >
+                <X className="h-4 w-4 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {viewingTest.questions.map((q, idx) => (
+                <div key={q.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                  <p className="text-xs font-bold text-slate-800">{idx + 1}. {q.question}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {q.options.map((opt, optIdx) => {
+                      const isCorrect = optIdx === q.correctAnswer;
+                      return (
+                        <div
+                          key={optIdx}
+                          className={`px-3 py-2 rounded-lg text-[11px] flex items-center gap-1.5 border ${
+                            isCorrect
+                              ? 'bg-green-50 border-green-200 text-green-800 font-bold'
+                              : 'bg-white border-slate-150 text-slate-600'
+                          }`}
+                        >
+                          {isCorrect && <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />}
+                          {opt}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-2 border-t border-slate-100">
+              <button
+                onClick={() => setViewingTest(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handleDeleteTest(viewingTest.id, viewingTest.title)}
+                className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl border border-red-100 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete Test
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit User Details Modal */}
       {editingUser && (
