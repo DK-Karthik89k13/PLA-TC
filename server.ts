@@ -663,7 +663,8 @@ Return the result STRICTLY as a JSON array matching this schema:
 
 // 5b. Tests API: Generate Test from File (docx, pdf, xls, json) with Gemini AI!
 app.post('/api/tests/generate-from-file', async (req, res) => {
-  const { fileName, fileData, category, difficulty } = req.body;
+  const { fileName, fileData, category, difficulty, numQuestions } = req.body;
+  const targetQuestionCount = Number(numQuestions) > 0 ? Number(numQuestions) : 5;
 
   if (!fileName || !fileData || !category) {
     return res.status(400).json({ error: 'File name, base64 data, and category are required' });
@@ -704,8 +705,11 @@ app.post('/api/tests/generate-from-file', async (req, res) => {
         const worksheet = workbook.Sheets[sheetName];
         extractedText += XLSX.utils.sheet_to_txt(worksheet) + '\n';
       });
+    } else if (ext === '.txt' || ext === '.csv') {
+      // Plain text - CSV is just comma-separated plain text, no special parsing needed
+      extractedText = buffer.toString('utf-8');
     } else {
-      return res.status(400).json({ error: `Unsupported file extension: ${ext}. Supported types: docx, pdf, xls, xlsx, json` });
+      return res.status(400).json({ error: `Unsupported file extension: ${ext}. Supported types: docx, pdf, xls, xlsx, json, txt, csv` });
     }
   } catch (err: any) {
     console.error('Error parsing uploaded file:', err);
@@ -720,28 +724,16 @@ app.post('/api/tests/generate-from-file', async (req, res) => {
     const db = readDb();
     
     // Create direct or mock questions
-    const finalQuestions = directMcqs || [
-      {
-        question: `[Offline Fallback] Question extracted from file "${fileName}": Can you define the primary concept?`,
-        options: [
-          'Option A: Industry-standard best practice',
-          'Option B: Experimental secondary methodology',
-          'Option C: Deprecated system behavior',
-          'Option D: Unrelated technical function'
-        ],
-        correctAnswer: 0
-      },
-      {
-        question: `[Offline Fallback] Question 2 based on contents of ${fileName}: Which of the following is true?`,
-        options: [
-          'Statement 1 is fully accurate',
-          'Statement 2 is partially accurate',
-          'Statement 3 is deprecated',
-          'Statement 4 is incorrect'
-        ],
-        correctAnswer: 0
-      }
-    ];
+    const finalQuestions = directMcqs || Array.from({ length: targetQuestionCount }, (_, i) => ({
+      question: `[Offline Fallback] Question ${i + 1} extracted from file "${fileName}": Can you identify the correct statement about this concept?`,
+      options: [
+        'Option A: Industry-standard best practice',
+        'Option B: Experimental secondary methodology',
+        'Option C: Deprecated system behavior',
+        'Option D: Unrelated technical function'
+      ],
+      correctAnswer: 0
+    }));
 
     const newTest = {
       id: `test-ai-${Date.now()}`,
@@ -799,9 +791,10 @@ ${extractedText.substring(0, 8000)}
 
 Target Category: "${category}"
 Difficulty Target: "${difficulty || 'Medium'}"
+Target Question Count: exactly ${targetQuestionCount} questions
 
 Requirements:
-1. Extract or write up to 10 highly relevant MCQs based on the questions, formulas, or technical/logical/verbal concepts found in the text. If the text lists direct questions, prioritize extracting and formatting them. If it contains general information, generate high-quality MCQs from it.
+1. Extract or write EXACTLY ${targetQuestionCount} highly relevant MCQs based on the questions, formulas, or technical/logical/verbal concepts found in the text. If the text lists direct questions, prioritize extracting and formatting them. If it contains general information, generate high-quality MCQs from it. Do not return more or fewer than ${targetQuestionCount} questions.
 2. Each MCQ must have exactly 4 options.
 3. Specifiy the correctAnswer index (0, 1, 2, or 3) representing the correct choice.
 4. Return the result STRICTLY as a JSON array matching this schema:
@@ -839,7 +832,13 @@ Requirements:
     });
 
     const textOutput = response.text || '[]';
-    const parsedQuestions = JSON.parse(textOutput);
+    let parsedQuestions = JSON.parse(textOutput);
+
+    // Safeguard: Gemini doesn't always follow exact-count instructions perfectly.
+    // Trim to the requested count so the test always matches what the user picked.
+    if (Array.isArray(parsedQuestions) && parsedQuestions.length > targetQuestionCount) {
+      parsedQuestions = parsedQuestions.slice(0, targetQuestionCount);
+    }
 
     const db = readDb();
     const newTest = {
