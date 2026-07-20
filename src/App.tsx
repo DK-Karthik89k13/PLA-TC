@@ -69,6 +69,7 @@ export default function App() {
   const [editUserRole, setEditUserRole] = useState<'student' | 'admin' | 'faculty'>('student');
   const [editUserBranchType, setEditUserBranchType] = useState<string>('Circuit');
   const [editUserDepartment, setEditUserDepartment] = useState<string>('CSE');
+  const [editUserPassword, setEditUserPassword] = useState('');
 
   // User creation state
   const [createUserName, setCreateUserName] = useState('');
@@ -495,13 +496,15 @@ export default function App() {
           email: editUserEmail,
           role: editUserRole,
           branchType: editUserBranchType,
-          department: editUserDepartment
+          department: editUserDepartment,
+          ...(editUserPassword.trim() ? { password: editUserPassword.trim() } : {})
         })
       });
 
       if (response.ok) {
         alert('User details updated successfully!');
         setEditingUser(null);
+        setEditUserPassword('');
         loadPortalData();
       } else {
         const errData = await response.json();
@@ -521,6 +524,7 @@ export default function App() {
     setEditUserRole(student.role);
     setEditUserBranchType(student.branchType || 'Circuit');
     setEditUserDepartment(student.department || 'CSE');
+    setEditUserPassword('');
   };
 
   // Admin: Create a new user (Student, Admin, or Faculty)
@@ -2481,6 +2485,17 @@ export default function App() {
                   onChange={(e) => setEditUserEmail(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                   placeholder="name@institution.edu"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">New Password</label>
+                <input
+                  type="password"
+                  value={editUserPassword}
+                  onChange={(e) => setEditUserPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  placeholder="Leave blank to keep current password"
                 />
               </div>
 
