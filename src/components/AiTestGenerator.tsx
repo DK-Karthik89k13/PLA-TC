@@ -30,10 +30,14 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Document Upload States
-  const [generationMode, setGenerationMode] = useState<'topic' | 'document'>('topic');
+  const [generationMode, setGenerationMode] = useState<'topic' | 'document' | 'json'>('topic');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [base64Data, setBase64Data] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
+
+  // Paste JSON state
+  const [pastedJson, setPastedJson] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -115,6 +119,59 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
       const data = await response.json();
       setSuccessTest(data.test);
       setTopic('');
+      onTestCreated();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Something went wrong while generating the test.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJsonPasteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setJsonError(null);
+
+    if (!pastedJson.trim()) return;
+
+    // Validate it's parseable JSON before sending
+    try {
+      JSON.parse(pastedJson);
+    } catch (err) {
+      setJsonError('That\'s not valid JSON. Check for missing commas, quotes, or brackets.');
+      return;
+    }
+
+    setLoading(true);
+    setStepIdx(0);
+    setError(null);
+    setSuccessTest(null);
+
+    try {
+      // Reuse the same backend endpoint as file upload - base64-encode the
+      // pasted text and send it as if it were a .json file.
+      const base64 = btoa(unescape(encodeURIComponent(pastedJson)));
+
+      const response = await fetch('/api/tests/generate-from-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'pasted-questions.json',
+          fileData: base64,
+          category,
+          difficulty,
+          numQuestions
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to generate test from JSON.');
+      }
+
+      const data = await response.json();
+      setSuccessTest(data.test);
+      setPastedJson('');
       onTestCreated();
     } catch (err: any) {
       console.error(err);
@@ -254,6 +311,21 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
               >
                 Extract from Document
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setGenerationMode('json');
+                  setError(null);
+                  setJsonError(null);
+                }}
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  generationMode === 'json' 
+                    ? 'bg-indigo-600 text-white shadow-md' 
+                    : 'bg-slate-800/40 text-indigo-200 hover:bg-slate-800/80 hover:text-white'
+                }`}
+              >
+                Paste JSON
+              </button>
             </div>
 
             {error && (
@@ -334,7 +406,7 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                   <Cpu className="h-4 w-4" /> Assemble Test Questions
                 </button>
               </form>
-            ) : (
+            ) : generationMode === 'document' ? (
               <form onSubmit={handleFileUploadSubmit} className="space-y-4">
                 {/* Drag and Drop area */}
                 <div 
@@ -449,6 +521,67 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
                   className="w-full mt-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-indigo-950/20 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Cpu className="h-4 w-4" /> Extract & Build Assessment
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleJsonPasteSubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-indigo-200">Paste MCQ JSON Array</label>
+                  <textarea
+                    value={pastedJson}
+                    onChange={(e) => {
+                      setPastedJson(e.target.value);
+                      setJsonError(null);
+                    }}
+                    rows={8}
+                    placeholder={'[\n  {\n    "question": "What is 2 + 2?",\n    "options": ["3", "4", "5", "6"],\n    "correctAnswer": 1\n  }\n]'}
+                    className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-xs text-white placeholder-slate-500 font-mono resize-y"
+                  />
+                  <p className="text-[10px] text-indigo-300">
+                    Paste an array of questions, each with "question", "options" (4 choices), and "correctAnswer" (0-3 index).
+                  </p>
+                  {jsonError && (
+                    <p className="text-[10px] text-red-300 flex items-center gap-1 pt-1">
+                      <AlertTriangle className="h-3 w-3" /> {jsonError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-indigo-200">Assessment Category</label>
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-xs text-white"
+                    >
+                      <option value="Technical">Technical (Coding/Computer Science)</option>
+                      <option value="Aptitude">Aptitude (Quantitative/Math)</option>
+                      <option value="Verbal">Verbal (English/Communication)</option>
+                      <option value="Logical">Logical (Puzzles/Reasoning)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-indigo-200">Difficulty Target</label>
+                    <select
+                      value={difficulty}
+                      onChange={(e) => setDifficulty(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-xs text-white"
+                    >
+                      <option value="Easy">Entry Level (Easy)</option>
+                      <option value="Medium">Standard Assessment (Medium)</option>
+                      <option value="Hard">Advanced / FAANG Drill (Hard)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!pastedJson.trim()}
+                  className="w-full mt-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-indigo-950/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Cpu className="h-4 w-4" /> Build Test from JSON
                 </button>
               </form>
             )}
