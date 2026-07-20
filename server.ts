@@ -452,7 +452,7 @@ app.put('/api/users/:id/role', async (req, res) => {
 // 2g. Users API: Update user details (Admin privilege)
 app.put('/api/users/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, username, email, role, approved, branchType, department } = req.body;
+  const { name, username, email, role, approved, branchType, department, password } = req.body;
 
   if (role && role !== 'student' && role !== 'admin' && role !== 'faculty') {
     return res.status(400).json({ error: 'Invalid role' });
@@ -484,13 +484,14 @@ app.put('/api/users/:id', async (req, res) => {
       approved: approved !== undefined ? approved : ((role === 'admin' || role === 'faculty') ? true : current.approved),
       branchType: branchType !== undefined ? branchType : current.branchType,
       department: department !== undefined ? department : current.department,
+      password: (password !== undefined && password !== '') ? password : current.password,
     };
 
     const { rows } = await db.query(
       `UPDATE users SET name = $1, username = $2, email = $3, role = $4,
-       approved = $5, branch_type = $6, department = $7 WHERE id = $8 RETURNING *`,
+       approved = $5, branch_type = $6, department = $7, password = $8 WHERE id = $9 RETURNING *`,
       [merged.name, merged.username, merged.email, merged.role,
-       merged.approved, merged.branchType, merged.department, id]
+       merged.approved, merged.branchType, merged.department, merged.password, id]
     );
 
     const { password, ...safeUser } = rowToUser(rows[0])!;
