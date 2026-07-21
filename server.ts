@@ -64,64 +64,7 @@ const SEED_DATA = {
   ],
   tests: [
     {
-      id: 'test-1',
-      title: 'Quantitative Aptitude Prep',
-      description: 'Covers essential quantitative aptitude topics including Profit & Loss, Percentages, and Probability.',
-      duration: 15,
-      category: 'Aptitude',
-      questions: [
-        {
-          id: 'q1',
-          question: 'A shopkeeper sells an article for $180 at a gain of 20%. What was the cost price of the article?',
-          options: ['$140', '$150', '$160', '$145'],
-          correctAnswer: 1
-        },
-        {
-          id: 'q2',
-          question: 'If log 27 = 1.431, what is the value of log 9?',
-          options: ['0.934', '0.954', '0.845', '1.121'],
-          correctAnswer: 1
-        },
-        {
-          id: 'q3',
-          question: 'Three unbiased coins are tossed. What is the probability of getting at most two heads?',
-          options: ['3/4', '1/4', '7/8', '5/8'],
-          correctAnswer: 2
-        }
-      ],
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'test-2',
-      title: 'Technical Web Core Assessment',
-      description: 'Tests fundamental concepts of modern Full-Stack web development (React, JavaScript, CSS).',
-      duration: 10,
-      category: 'Technical',
-      questions: [
-        {
-          id: 'q2-1',
-          question: 'Which of the following is true about React state updates?',
-          options: [
-            'They are always synchronous',
-            'They directly modify the component state on the spot',
-            'They may be batched and are asynchronous',
-            'They force full page refreshes'
-          ],
-          correctAnswer: 2
-        },
-        {
-          id: 'q2-2',
-          question: 'What is the purpose of the useEffect dependency array in React?',
-          options: [
-            'To define CSS styles dynamically',
-            'To specify when the effect function should run or re-trigger',
-            'To register Event Listeners exclusively',
-            'To improve network connection speed'
-          ],
-          correctAnswer: 1
-        }
-      ],
-      createdAt: new Date().toISOString()
+      
     }
   ],
   results: [
