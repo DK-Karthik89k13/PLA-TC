@@ -699,7 +699,7 @@ export default function App() {
                   Government College of Engineering, Erode
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-500 max-w-lg leading-relaxed">
-                  Welcome to the Placement and Training Cell. Prepare for high-yield technical, aptitude, logical, and verbal assessments powered by Gemini AI, connect with expert mentors, and apply for active recruitment drives.
+                  Welcome to the Placement and Training Cell. Prepare for high-yield technical, aptitude, logical, and verbal assessments powered by AI (Gemini or Hugging Face), connect with expert mentors, and apply for active recruitment drives.
                 </p>
               </div>
 
@@ -1033,7 +1033,7 @@ export default function App() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Ready to practice mock placement assessments today? Try our Gemini AI drills.</p>
+                <p className="text-xs text-slate-500 mt-1">Ready to practice mock placement assessments today? Try our AI-generated drills.</p>
               </div>
               
               {/* Mini Stats widget */}
@@ -1238,7 +1238,7 @@ export default function App() {
                     <li>"Tips to write high-impact resume bullets"</li>
                   </ul>
                   <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400">
-                    Your queries are processed using <strong>Gemini 3.5 Flash</strong> for career counsel, formatting tips, and aptitude calculations advice.
+                    Your queries are processed using your chosen AI model (Gemini or Hugging Face) for career counsel, formatting tips, and aptitude calculations advice.
                   </div>
                 </div>
               </div>
@@ -1468,7 +1468,7 @@ export default function App() {
                 <div className="md:col-span-4 p-5 bg-white border border-slate-100 rounded-2xl space-y-4 text-xs shadow-sm">
                   <h5 className="font-bold text-slate-800 uppercase tracking-wider">How AI generation works</h5>
                   <p className="text-slate-500 leading-relaxed">
-                    By simply inputting a technical, aptitude, logical, or verbal topic, PLA & T passes a system prompt to Gemini to structure a multi-choice exam complete with 4 distractor choices and verified scoring keys.
+                    By simply inputting a technical, aptitude, logical, or verbal topic, PLA & T passes a system prompt to your selected AI model (Gemini or Hugging Face) to structure a multi-choice exam complete with 4 distractor choices and verified scoring keys.
                   </p>
                   <p className="text-slate-500 leading-relaxed font-bold">
                     Currently published tests: {tests.length}
@@ -2403,7 +2403,7 @@ export default function App() {
       {/* Footer information bar */}
       <footer className="mt-12 bg-white border-t border-slate-100 py-6 shrink-0 text-center text-xs text-slate-400">
         <p className="font-medium">© 2026 Central Placement Training & Recruitment Portal • All Rights Reserved</p>
-        <p className="text-[10px] mt-1.5 opacity-80">This application utilizes a NodeJS full-stack Express server backed by Gemini AI. Optimized for university recruits.</p>
+        <p className="text-[10px] mt-1.5 opacity-80">This application utilizes a NodeJS full-stack Express server backed by Gemini and Hugging Face AI. Optimized for university recruits.</p>
       </footer>
 
       {/* Info Modals */}
