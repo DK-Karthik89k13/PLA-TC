@@ -497,6 +497,53 @@ export default function App() {
     }
   };
 
+  // Admin: Approve ALL pending user registrations at once
+  const handleApproveAllPending = async () => {
+    const pending = allStudents.filter(s => s.approved === false);
+    if (pending.length === 0) return;
+    if (!confirm(`Approve all ${pending.length} pending registration(s)?`)) return;
+
+    try {
+      const results = await Promise.allSettled(
+        pending.map(u => fetch(`/api/users/${u.id}/approve`, { method: 'PUT' }))
+      );
+      const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok)).length;
+      if (failed > 0) {
+        alert(`Approved ${pending.length - failed} of ${pending.length}. ${failed} failed - please retry those individually.`);
+      } else {
+        alert(`All ${pending.length} pending account(s) approved successfully!`);
+      }
+      loadPortalData();
+    } catch (error) {
+      console.error(error);
+      alert('Error approving all pending users.');
+    }
+  };
+
+  // Admin: Reject ALL pending user registrations at once (permanently deletes them from the database)
+  const handleRejectAllPending = async () => {
+    // Faculty can only reject student accounts, mirroring the single-user rejection rule
+    const pending = allStudents.filter(s => s.approved === false && (currentUser?.role === 'admin' || s.role === 'student'));
+    if (pending.length === 0) return;
+    if (!confirm(`Reject and permanently delete all ${pending.length} pending registration(s) from the database? This cannot be undone.`)) return;
+
+    try {
+      const results = await Promise.allSettled(
+        pending.map(u => fetch(`/api/users/${u.id}`, { method: 'DELETE' }))
+      );
+      const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok)).length;
+      if (failed > 0) {
+        alert(`Deleted ${pending.length - failed} of ${pending.length}. ${failed} failed - please retry those individually.`);
+      } else {
+        alert(`All ${pending.length} pending registration(s) rejected and deleted successfully.`);
+      }
+      loadPortalData();
+    } catch (error) {
+      console.error(error);
+      alert('Error rejecting all pending users.');
+    }
+  };
+
   // Admin: Change user role/privilege
   const handleChangeUserRole = async (userId: string, newRole: 'student' | 'admin' | 'faculty') => {
     try {
@@ -2157,10 +2204,28 @@ export default function App() {
 
                     {/* Pending Registrations */}
                     <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm space-y-3">
-                      <h5 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-                        Pending Registrations ({allStudents.filter(s => s.approved === false).length})
-                      </h5>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h5 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                          Pending Registrations ({allStudents.filter(s => s.approved === false).length})
+                        </h5>
+                        {allStudents.filter(s => s.approved === false).length > 0 && (
+                          <div className="flex gap-2 shrink-0">
+                            <button
+                              onClick={handleApproveAllPending}
+                              className="py-1.5 px-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-[10px] transition-all cursor-pointer shadow-sm shadow-green-600/10"
+                            >
+                              Approve All
+                            </button>
+                            <button
+                              onClick={handleRejectAllPending}
+                              className="py-1.5 px-3 bg-white border border-red-200 hover:bg-red-50 text-red-600 font-bold rounded-lg text-[10px] transition-all cursor-pointer"
+                            >
+                              Reject All
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       
                       {allStudents.filter(s => s.approved === false).length === 0 ? (
                         <div className="p-8 text-center border border-dashed border-slate-100 rounded-xl space-y-2">
