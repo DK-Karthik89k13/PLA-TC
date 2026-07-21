@@ -62,26 +62,8 @@ const SEED_DATA = {
     { id: 'admin-1', username: 'admin', password: 'password', role: 'admin', name: 'Admin', email: 'admin@gceerode.ac.in' },
     { id: 'student-1', username: 'student', password: 'password', role: 'student', name: 'Alex Carter', email: 'alex.carter@student.edu' }
   ],
-  tests: [
-    {
-      
-    }
-  ],
-  results: [
-    {
-      id: 'res-1',
-      userId: 'student-1',
-      username: 'student',
-      studentName: 'Alex Carter',
-      testId: 'test-1',
-      testTitle: 'Quantitative Aptitude Prep',
-      category: 'Aptitude',
-      score: 2,
-      totalQuestions: 3,
-      submittedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-      answers: { 'q1': 1, 'q2': 0, 'q3': 2 }
-    }
-  ],
+  tests: [],
+  results: [],
   placementDrives: [
     {
       id: 'drive-1',
