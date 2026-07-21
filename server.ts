@@ -8,10 +8,12 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
+import { InferenceClient } from '@huggingface/inference';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { getPool, initUsersTable, seedUsersIfEmpty, rowToUser } from './src/db/postgres';
+import { AI_PROVIDERS, DEFAULT_PROVIDER, DEFAULT_MODEL, getDefaultModelForProvider, type AiProvider } from './src/aiModels';
 
 // Safe require for CommonJS modules in ES Modules (dev, via tsx) or bundled
 // CJS (production, via esbuild). In dev, import.meta.url is a real string and
@@ -240,6 +242,75 @@ function getGenAI() {
   }
   return aiInstance;
 }
+
+// Lazy load Hugging Face Inference Client to avoid startup crashes if token is missing
+let hfInstance: InferenceClient | null = null;
+function getHFClient() {
+  if (!hfInstance) {
+    const token = process.env.HF_TOKEN;
+    if (!token) {
+      console.warn('HF_TOKEN is not defined. Hugging Face features are unavailable.');
+      return null;
+    }
+    hfInstance = new InferenceClient(token);
+  }
+  return hfInstance;
+}
+
+// Resolve/validate an incoming { provider, model } selection from the client,
+// falling back to safe defaults when omitted or unrecognized.
+function resolveAiSelection(provider?: string, model?: string): { provider: AiProvider; model: string } {
+  const resolvedProvider: AiProvider = provider === 'huggingface' ? 'huggingface' : DEFAULT_PROVIDER;
+  const providerConfig = AI_PROVIDERS.find((p) => p.id === resolvedProvider);
+  const isKnownModel = !!model && providerConfig?.models.some((m) => m.id === model);
+  const resolvedModel = isKnownModel ? (model as string) : getDefaultModelForProvider(resolvedProvider);
+  return { provider: resolvedProvider, model: resolvedModel };
+}
+
+// Hugging Face chat models don't support Gemini's structured responseSchema,
+// so we ask for JSON in the prompt and then pull the first valid JSON array
+// out of whatever text comes back.
+function extractJsonArray(text: string): any[] {
+  const cleaned = text.replace(/```json/gi, '```').trim();
+  const fenceMatch = cleaned.match(/```([\s\S]*?)```/);
+  const candidate = fenceMatch ? fenceMatch[1] : cleaned;
+  const start = candidate.indexOf('[');
+  const end = candidate.lastIndexOf(']');
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error('No JSON array found in AI response');
+  }
+  return JSON.parse(candidate.substring(start, end + 1));
+}
+
+// Calls the selected Hugging Face chat model and returns the raw text reply.
+async function generateWithHuggingFace(model: string, systemInstruction: string, userPrompt: string): Promise<string> {
+  const hf = getHFClient();
+  if (!hf) {
+    throw new Error('Hugging Face is not configured on this server (missing HF_TOKEN).');
+  }
+  const completion = await hf.chatCompletion({
+    model,
+    provider: 'auto',
+    messages: [
+      { role: 'system', content: systemInstruction },
+      { role: 'user', content: userPrompt }
+    ],
+    max_tokens: 4096,
+    temperature: 0.7
+  });
+  return completion.choices?.[0]?.message?.content || '';
+}
+
+// 0. AI Models: expose the provider/model catalog to the frontend picker
+app.get('/api/ai/models', (req, res) => {
+  res.json({
+    providers: AI_PROVIDERS,
+    defaultProvider: DEFAULT_PROVIDER,
+    defaultModel: DEFAULT_MODEL,
+    hfConfigured: !!process.env.HF_TOKEN,
+    geminiConfigured: !!process.env.GEMINI_API_KEY
+  });
+});
 
 // REST API Endpoints
 
@@ -494,7 +565,7 @@ app.put('/api/users/:id', async (req, res) => {
        merged.approved, merged.branchType, merged.department, merged.password, id]
     );
 
-    const { password: _, ...safeUser } = rowToUser(rows[0])!;
+    const { password, ...safeUser } = rowToUser(rows[0])!;
     res.json({ user: safeUser, message: 'User updated successfully' });
   } catch (error: any) {
     console.error('Update user error:', error);
@@ -572,9 +643,55 @@ app.delete('/api/tests/:id', (req, res) => {
 // 5. Tests API: Generate Test with Gemini AI!
 app.post('/api/tests/generate-ai', async (req, res) => {
   const { topic, numQuestions, category, difficulty } = req.body;
-  
+  const { provider, model } = resolveAiSelection(req.body.provider, req.body.model);
+
   if (!topic || !numQuestions || !category) {
     return res.status(400).json({ error: 'Topic, number of questions, and category are required' });
+  }
+
+  // Hugging Face path: bypass Gemini's structured schema and just prompt for strict JSON.
+  if (provider === 'huggingface') {
+    try {
+      const systemInstruction = 'You are an expert recruitment coordinator and placement test creator for top global IT & engineering companies. You always reply with STRICT valid JSON only, no prose, no markdown fences.';
+      const prompt = `Generate a set of ${numQuestions} multiple choice questions (MCQs) for a student placement preparation test on the topic: "${topic}".
+The category is: "${category}" and the difficulty level is: "${difficulty || 'Medium'}".
+Each question must have exactly 4 options. Specify the correctAnswer index (0, 1, 2, or 3) representing the correct choice.
+Make the questions realistic to software/engineering corporate placement papers (Aptitude, Tech, and Logical).
+Return the result STRICTLY as a JSON array matching this schema and nothing else:
+[
+  {
+    "question": "A clear description of the problem or query...",
+    "options": ["Option 0 text", "Option 1 text", "Option 2 text", "Option 3 text"],
+    "correctAnswer": 0
+  }
+]`;
+
+      const textOutput = await generateWithHuggingFace(model, systemInstruction, prompt);
+      const parsedQuestions = extractJsonArray(textOutput);
+
+      const db = readDb();
+      const newTest = {
+        id: `test-ai-${Date.now()}`,
+        title: `AI: ${topic} (${difficulty || 'Medium'})`,
+        description: `Hugging Face (${model}) generated recruitment prep mock test focusing on ${topic}.`,
+        duration: (parsedQuestions.length || 5) * 3,
+        category,
+        questions: parsedQuestions.map((q: any, idx: number) => ({
+          id: `q-ai-${idx}-${Date.now()}`,
+          question: q.question,
+          options: q.options,
+          correctAnswer: q.correctAnswer
+        })),
+        createdAt: new Date().toISOString()
+      };
+
+      db.tests.push(newTest);
+      writeDb(db);
+      return res.json({ test: newTest });
+    } catch (error: any) {
+      console.error('Error generating questions with Hugging Face:', error);
+      return res.status(500).json({ error: error.message || 'AI test generation failed. Please try again or create manually.' });
+    }
   }
 
   const ai = getGenAI();
@@ -686,6 +803,7 @@ Return the result STRICTLY as a JSON array matching this schema:
 app.post('/api/tests/generate-from-file', async (req, res) => {
   const { fileName, fileData, category, difficulty, numQuestions } = req.body;
   const targetQuestionCount = Number(numQuestions) > 0 ? Number(numQuestions) : 5;
+  const { provider, model } = resolveAiSelection(req.body.provider, req.body.model);
 
   if (!fileName || !fileData || !category) {
     return res.status(400).json({ error: 'File name, base64 data, and category are required' });
@@ -765,6 +883,96 @@ app.post('/api/tests/generate-from-file', async (req, res) => {
     return res.status(400).json({ error: `Failed to parse file: ${err.message || err}` });
   }
 
+  // If we have direct MCQs (parsed straight from an uploaded JSON file), we
+  // don't need any AI provider at all - regardless of what was selected.
+  if (directMcqs) {
+    // Respect the user's selected question count here too, same as the AI path
+    const trimmedMcqs = directMcqs.length > targetQuestionCount
+      ? directMcqs.slice(0, targetQuestionCount)
+      : directMcqs;
+
+    const db = readDb();
+    const newTest = {
+      id: `test-ai-${Date.now()}`,
+      title: `Imported: ${fileName.substring(0, 20)}`,
+      description: `Imported directly from JSON file "${fileName}".`,
+      duration: trimmedMcqs.length * 3,
+      category,
+      questions: trimmedMcqs.map((q: any, idx: number) => ({
+        id: `q-ai-${idx}-${Date.now()}`,
+        question: q.question,
+        options: q.options,
+        correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0
+      })),
+      createdAt: new Date().toISOString()
+    };
+
+    db.tests.push(newTest);
+    writeDb(db);
+    return res.json({ test: newTest });
+  }
+
+  // Hugging Face path
+  if (provider === 'huggingface') {
+    try {
+      const systemInstruction = 'You are an elite placement cell training director and assessment designer. You always reply with STRICT valid JSON only, no prose, no markdown fences.';
+      const prompt = `We have extracted text from an uploaded file named "${fileName}".
+Your task is to analyze the extracted text and generate a structured set of multiple choice questions (MCQs) for a mock placement prep test.
+
+Extracted Text from file:
+"""
+${extractedText.substring(0, 8000)}
+"""
+
+Target Category: "${category}"
+Difficulty Target: "${difficulty || 'Medium'}"
+Target Question Count: exactly ${targetQuestionCount} questions
+
+Requirements:
+1. Extract or write EXACTLY ${targetQuestionCount} highly relevant MCQs based on the questions, formulas, or technical/logical/verbal concepts found in the text. If the text lists direct questions, prioritize extracting and formatting them. If it contains general information, generate high-quality MCQs from it. Do not return more or fewer than ${targetQuestionCount} questions.
+2. Each MCQ must have exactly 4 options.
+3. Specify the correctAnswer index (0, 1, 2, or 3) representing the correct choice.
+4. Return the result STRICTLY as a JSON array matching this schema and nothing else:
+[
+  {
+    "question": "A clear description of the problem or query...",
+    "options": ["Option 0 text", "Option 1 text", "Option 2 text", "Option 3 text"],
+    "correctAnswer": 0
+  }
+]`;
+
+      const textOutput = await generateWithHuggingFace(model, systemInstruction, prompt);
+      let parsedQuestions = extractJsonArray(textOutput);
+
+      if (Array.isArray(parsedQuestions) && parsedQuestions.length > targetQuestionCount) {
+        parsedQuestions = parsedQuestions.slice(0, targetQuestionCount);
+      }
+
+      const db = readDb();
+      const newTest = {
+        id: `test-ai-${Date.now()}`,
+        title: `AI Document: ${fileName.substring(0, 25)}`,
+        description: `Hugging Face (${model}) generated preparation test from uploaded file "${fileName}".`,
+        duration: (parsedQuestions.length || 5) * 3,
+        category,
+        questions: parsedQuestions.map((q: any, idx: number) => ({
+          id: `q-ai-${idx}-${Date.now()}`,
+          question: q.question,
+          options: q.options,
+          correctAnswer: q.correctAnswer
+        })),
+        createdAt: new Date().toISOString()
+      };
+
+      db.tests.push(newTest);
+      writeDb(db);
+      return res.json({ test: newTest });
+    } catch (error: any) {
+      console.error('Error generating questions from file with Hugging Face:', error);
+      return res.status(500).json({ error: error.message || 'AI test generation from file failed. Please verify the file contents or try a different document.' });
+    }
+  }
+
   const ai = getGenAI();
 
   // Offline Fallback
@@ -773,7 +981,7 @@ app.post('/api/tests/generate-from-file', async (req, res) => {
     const db = readDb();
     
     // Create direct or mock questions
-    const finalQuestions = directMcqs || Array.from({ length: targetQuestionCount }, (_, i) => ({
+    const finalQuestions = Array.from({ length: targetQuestionCount }, (_, i) => ({
       question: `[Offline Fallback] Question ${i + 1} extracted from file "${fileName}": Can you identify the correct statement about this concept?`,
       options: [
         'Option A: Industry-standard best practice',
@@ -802,34 +1010,6 @@ app.post('/api/tests/generate-from-file', async (req, res) => {
     db.tests.push(newTest);
     writeDb(db);
     return res.json({ test: newTest, offlineFallback: true });
-  }
-
-  // If we have direct MCQs, we don't even need Gemini
-  if (directMcqs) {
-    // Respect the user's selected question count here too, same as the AI path
-    const trimmedMcqs = directMcqs.length > targetQuestionCount
-      ? directMcqs.slice(0, targetQuestionCount)
-      : directMcqs;
-
-    const db = readDb();
-    const newTest = {
-      id: `test-ai-${Date.now()}`,
-      title: `Imported: ${fileName.substring(0, 20)}`,
-      description: `Imported directly from JSON file "${fileName}".`,
-      duration: trimmedMcqs.length * 3,
-      category,
-      questions: trimmedMcqs.map((q: any, idx: number) => ({
-        id: `q-ai-${idx}-${Date.now()}`,
-        question: q.question,
-        options: q.options,
-        correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0
-      })),
-      createdAt: new Date().toISOString()
-    };
-
-    db.tests.push(newTest);
-    writeDb(db);
-    return res.json({ test: newTest });
   }
 
   // Use Gemini to generate test questions from extractedText
@@ -1076,9 +1256,47 @@ app.get('/api/training-resources', (req, res) => {
 // 12. Placement Coach Chat with Gemini AI!
 app.post('/api/ai/chat', async (req, res) => {
   const { messages } = req.body; // list of { role: 'user'|'model', content: string }
-  
+  const { provider, model } = resolveAiSelection(req.body.provider, req.body.model);
+
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Conversation messages history is required' });
+  }
+
+  const systemInstruction = `You are "Placement Coach Pro", an elite career counsellor and technical trainer helper for university placement boards.
+Your goal is to prepare college graduates and students to crack job interviews, code assessments, aptitude rounds, and group discussions at top Fortune 500 tech/finance companies.
+Provide specific, actionable advice. Suggest resources, mock question formats, and outline study timelines.
+Keep your tone inspiring, highly professional, encouraging, and clear.`;
+
+  // Hugging Face chat path
+  if (provider === 'huggingface') {
+    try {
+      const hf = getHFClient();
+      if (!hf) {
+        return res.status(500).json({ error: 'Hugging Face is not configured on this server (missing HF_TOKEN).' });
+      }
+
+      const hfMessages = [
+        { role: 'system', content: systemInstruction },
+        ...messages.map((m: any) => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content
+        }))
+      ];
+
+      const completion = await hf.chatCompletion({
+        model,
+        provider: 'auto',
+        messages: hfMessages,
+        max_tokens: 1024,
+        temperature: 0.7
+      });
+
+      const reply = completion.choices?.[0]?.message?.content || "I couldn't come up with a response - please try again.";
+      return res.json({ reply });
+    } catch (error: any) {
+      console.error('Error in Placement AI Coach Chat (Hugging Face):', error);
+      return res.status(500).json({ error: error.message || 'AI Coach was unable to respond. Please try again.' });
+    }
   }
 
   const ai = getGenAI();
@@ -1102,11 +1320,6 @@ app.post('/api/ai/chat', async (req, res) => {
   try {
     // Format messages for @google/genai chat
     // Map roles: 'user' -> 'user', 'assistant' -> 'model'
-    const systemInstruction = `You are "Placement Coach Pro", an elite career counsellor and technical trainer helper for university placement boards.
-Your goal is to prepare college graduates and students to crack job interviews, code assessments, aptitude rounds, and group discussions at top Fortune 500 tech/finance companies.
-Provide specific, actionable advice. Suggest resources, mock question formats, and outline study timelines.
-Keep your tone inspiring, highly professional, encouraging, and clear.`;
-
     const chatHistory = messages.map((m: any) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }]
