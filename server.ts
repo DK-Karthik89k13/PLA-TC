@@ -494,7 +494,7 @@ app.put('/api/users/:id', async (req, res) => {
        merged.approved, merged.branchType, merged.department, merged.password, id]
     );
 
-    const { password, ...safeUser } = rowToUser(rows[0])!;
+    const { password: _, ...safeUser } = rowToUser(rows[0])!;
     res.json({ user: safeUser, message: 'User updated successfully' });
   } catch (error: any) {
     console.error('Update user error:', error);
