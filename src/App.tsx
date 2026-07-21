@@ -94,6 +94,8 @@ export default function App() {
   // Print & filtering state (Admin/Faculty)
   const [filterDepartment, setFilterDepartment] = useState<string>('All');
   const [filterSectionDept, setFilterSectionDept] = useState<string>('All');
+  const [filterPendingDept, setFilterPendingDept] = useState<string>('All');
+  const [filterPendingRole, setFilterPendingRole] = useState<string>('All');
   const [printPreviewType, setPrintPreviewType] = useState<'gradebook' | 'section-list' | null>(null);
   const [printOrientation, setPrintOrientation] = useState<'portrait' | 'landscape'>('landscape');
 
@@ -499,9 +501,12 @@ export default function App() {
 
   // Admin: Approve ALL pending user registrations at once
   const handleApproveAllPending = async () => {
-    const pending = allStudents.filter(s => s.approved === false);
+    const pending = allStudents.filter(s => s.approved === false)
+      .filter(s => filterPendingDept === 'All' || (s.department || '').toLowerCase() === filterPendingDept.toLowerCase())
+      .filter(s => filterPendingRole === 'All' || s.role === filterPendingRole);
     if (pending.length === 0) return;
-    if (!confirm(`Approve all ${pending.length} pending registration(s)?`)) return;
+    const scopeLabel = (filterPendingDept !== 'All' || filterPendingRole !== 'All') ? ' matching the current filter' : '';
+    if (!confirm(`Approve all ${pending.length} pending registration(s)${scopeLabel}?`)) return;
 
     try {
       const results = await Promise.allSettled(
@@ -523,9 +528,12 @@ export default function App() {
   // Admin: Reject ALL pending user registrations at once (permanently deletes them from the database)
   const handleRejectAllPending = async () => {
     // Faculty can only reject student accounts, mirroring the single-user rejection rule
-    const pending = allStudents.filter(s => s.approved === false && (currentUser?.role === 'admin' || s.role === 'student'));
+    const pending = allStudents.filter(s => s.approved === false && (currentUser?.role === 'admin' || s.role === 'student'))
+      .filter(s => filterPendingDept === 'All' || (s.department || '').toLowerCase() === filterPendingDept.toLowerCase())
+      .filter(s => filterPendingRole === 'All' || s.role === filterPendingRole);
     if (pending.length === 0) return;
-    if (!confirm(`Reject and permanently delete all ${pending.length} pending registration(s) from the database? This cannot be undone.`)) return;
+    const scopeLabel = (filterPendingDept !== 'All' || filterPendingRole !== 'All') ? ' matching the current filter' : '';
+    if (!confirm(`Reject and permanently delete all ${pending.length} pending registration(s)${scopeLabel} from the database? This cannot be undone.`)) return;
 
     try {
       const results = await Promise.allSettled(
@@ -2226,15 +2234,63 @@ export default function App() {
                           </div>
                         )}
                       </div>
+
+                      {allStudents.filter(s => s.approved === false).length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 pb-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filter:</span>
+                          <select
+                            value={filterPendingRole}
+                            onChange={(e) => setFilterPendingRole(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 font-bold text-slate-600 focus:outline-none text-[11px] cursor-pointer"
+                          >
+                            <option value="All">All Roles</option>
+                            <option value="student">Student</option>
+                            <option value="faculty">Faculty</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                          <select
+                            value={filterPendingDept}
+                            onChange={(e) => setFilterPendingDept(e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 font-bold text-slate-600 focus:outline-none text-[11px] cursor-pointer"
+                          >
+                            <option value="All">All Departments</option>
+                            <option value="CSE">CSE</option>
+                            <option value="IT">IT</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EEE">EEE</option>
+                            <option value="CSDS">CSDS</option>
+                            <option value="MECH">MECH</option>
+                            <option value="AUTO">AUTO</option>
+                          </select>
+                          {(filterPendingRole !== 'All' || filterPendingDept !== 'All') && (
+                            <button
+                              onClick={() => { setFilterPendingRole('All'); setFilterPendingDept('All'); }}
+                              className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer underline underline-offset-2"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      )}
                       
                       {allStudents.filter(s => s.approved === false).length === 0 ? (
                         <div className="p-8 text-center border border-dashed border-slate-100 rounded-xl space-y-2">
                           <p className="text-slate-400 text-xs">No pending student approvals at this time.</p>
                           <p className="text-[10px] text-slate-400">New students who register will appear here immediately for authorization.</p>
                         </div>
+                      ) : allStudents.filter(s => s.approved === false)
+                          .filter(s => filterPendingRole === 'All' || s.role === filterPendingRole)
+                          .filter(s => filterPendingDept === 'All' || (s.department || '').toLowerCase() === filterPendingDept.toLowerCase())
+                          .length === 0 ? (
+                        <div className="p-8 text-center border border-dashed border-slate-100 rounded-xl space-y-2">
+                          <p className="text-slate-400 text-xs">No pending registrations match the current filter.</p>
+                        </div>
                       ) : (
                         <div className="space-y-3">
-                          {allStudents.filter(s => s.approved === false).map((student) => (
+                          {allStudents.filter(s => s.approved === false)
+                            .filter(s => filterPendingRole === 'All' || s.role === filterPendingRole)
+                            .filter(s => filterPendingDept === 'All' || (s.department || '').toLowerCase() === filterPendingDept.toLowerCase())
+                            .map((student) => (
                             <div key={student.id} className="p-4 border border-slate-100 rounded-xl bg-amber-50/20 hover:bg-amber-50/40 hover:border-amber-100 transition-all space-y-3">
                               <div className="flex justify-between items-start gap-3 text-xs">
                                 <div className="min-w-0">
