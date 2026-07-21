@@ -4,8 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, ListOrdered, Calendar, UploadCloud, FileText, X } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Cpu, ListOrdered, Calendar, UploadCloud, FileText, X, BrainCircuit } from 'lucide-react';
 import { Test } from '../types';
+import { AI_PROVIDERS, AiProvider, DEFAULT_PROVIDER, getDefaultModelForProvider } from '../aiModels';
 
 interface AiTestGeneratorProps {
   onTestCreated: () => void;
@@ -24,6 +25,8 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
   const [category, setCategory] = useState('Technical');
   const [difficulty, setDifficulty] = useState('Medium');
   const [numQuestions, setNumQuestions] = useState(5);
+  const [aiProvider, setAiProvider] = useState<AiProvider>(DEFAULT_PROVIDER);
+  const [aiModel, setAiModel] = useState<string>(getDefaultModelForProvider(DEFAULT_PROVIDER));
   const [loading, setLoading] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [successTest, setSuccessTest] = useState<Test | null>(null);
@@ -104,7 +107,9 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
           topic,
           category,
           difficulty,
-          numQuestions
+          numQuestions,
+          provider: aiProvider,
+          model: aiModel
         })
       });
 
@@ -142,7 +147,9 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
           fileData: base64Data,
           category,
           difficulty,
-          numQuestions
+          numQuestions,
+          provider: aiProvider,
+          model: aiModel
         })
       });
 
@@ -176,10 +183,46 @@ export function AiTestGenerator({ onTestCreated }: AiTestGeneratorProps) {
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <h4 className="font-bold text-base">Gemini AI Test Builder</h4>
+            <h4 className="font-bold text-base">AI Test Builder</h4>
             <p className="text-indigo-200 text-xs">Instantly generate high-quality mcqs for placement preparation.</p>
           </div>
         </div>
+
+        {!loading && !successTest && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 p-3 bg-slate-900/40 border border-indigo-950/60 rounded-xl">
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-indigo-200">
+                <BrainCircuit className="h-3.5 w-3.5" /> AI Provider
+              </label>
+              <select
+                value={aiProvider}
+                onChange={(e) => {
+                  const provider = e.target.value as AiProvider;
+                  setAiProvider(provider);
+                  setAiModel(getDefaultModelForProvider(provider));
+                }}
+                className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-xs text-white"
+              >
+                {AI_PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-indigo-200">Model</label>
+              <select
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-xs text-white"
+              >
+                {AI_PROVIDERS.find((p) => p.id === aiProvider)?.models.map((m) => (
+                  <option key={m.id} value={m.id} title={m.description}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="py-8 text-center space-y-4">
