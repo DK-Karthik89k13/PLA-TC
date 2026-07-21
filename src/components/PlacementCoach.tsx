@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, User, Bot, Loader2, ArrowRight } from 'lucide-react';
+import { Send, Sparkles, User, Bot, Loader2, ArrowRight, BrainCircuit } from 'lucide-react';
+import { AI_PROVIDERS, AiProvider, DEFAULT_PROVIDER, getDefaultModelForProvider } from '../aiModels';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -27,6 +28,9 @@ export function PlacementCoach() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [aiProvider, setAiProvider] = useState<AiProvider>(DEFAULT_PROVIDER);
+  const [aiModel, setAiModel] = useState<string>(getDefaultModelForProvider(DEFAULT_PROVIDER));
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,7 +50,7 @@ export function PlacementCoach() {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: updatedMessages })
+        body: JSON.stringify({ messages: updatedMessages, provider: aiProvider, model: aiModel })
       });
 
       if (!response.ok) {
@@ -79,11 +83,56 @@ export function PlacementCoach() {
           </div>
           <div>
             <h4 className="font-bold text-sm">Placement Coach Pro</h4>
-            <p className="text-[10px] text-indigo-100">Powered by Gemini AI • Always Active</p>
+            <p className="text-[10px] text-indigo-100">
+              Powered by {AI_PROVIDERS.find((p) => p.id === aiProvider)?.label} • Always Active
+            </p>
           </div>
         </div>
-        <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowModelPicker((v) => !v)}
+            title="Choose AI model"
+            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+          >
+            <BrainCircuit className="h-4 w-4 text-white" />
+          </button>
+          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+        </div>
       </div>
+
+      {showModelPicker && (
+        <div className="p-3 bg-slate-50 border-b border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-2 shrink-0">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide">AI Provider</label>
+            <select
+              value={aiProvider}
+              onChange={(e) => {
+                const provider = e.target.value as AiProvider;
+                setAiProvider(provider);
+                setAiModel(getDefaultModelForProvider(provider));
+              }}
+              className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              {AI_PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Model</label>
+            <select
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              {AI_PROVIDERS.find((p) => p.id === aiProvider)?.models.map((m) => (
+                <option key={m.id} value={m.id} title={m.description}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50">
